@@ -1,9 +1,4 @@
-num_classes = 1
-strides = [8, 16, 32, 64, 128]
-bbox_coder = dict(type='mmdet.DistancePointBBoxCoder')
 with_bezier = True
-norm_on_bbox = True
-use_sigmoid_cls = True
 
 dictionary = dict(
     type='Dictionary',
@@ -18,7 +13,7 @@ model = dict(
     detector=dict(
         type='TESTR',
         backbone=dict(
-            type='ResNet',
+            type='mmdet.ResNet',
             depth=50,
             num_stages=4,
             out_indices=(1, 2, 3),
@@ -28,7 +23,6 @@ model = dict(
             style='pytorch',
             init_cfg=dict(
                 type='Pretrained', checkpoint='torchvision://resnet50')),
-    
         bbox_head=dict(
             type='TextSpotDETRHead',
             d_model=256,
