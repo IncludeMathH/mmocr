@@ -1,33 +1,39 @@
 _base_ = [
-    '_base_dbnet_resnet50-dcnv2_fpnc.py',
+    '_base_mask-rcnn_resnet50_fpn.py',
     '../_base_/datasets/roadtext.py',
     '../_base_/default_runtime.py',
-    '../_base_/schedules/schedule_sgd_1200e.py',
+    '../_base_/schedules/schedule_sgd_base.py',
 ]
 
-# TODO: Replace the link
-load_from = 'https://download.openmmlab.com/mmocr/textdet/dbnet/tmp_1.0_pretrain/dbnet_r50dcnv2_fpnc_sbn_2e_synthtext_20210325-ed322016.pth'  # noqa
+# optimizer
+optim_wrapper = dict(optimizer=dict(lr=0.08))
+train_cfg = dict(max_epochs=40)
+# learning policy
+param_scheduler = [
+    dict(type='LinearLR', end=500, start_factor=0.001, by_epoch=False),
+    dict(type='MultiStepLR', milestones=[15, 25], end=40),
+]
 
 # dataset settings
 roadtext_textdet_train = _base_.roadtext_det_train
-roadtext_textdet_train.pipeline = _base_.train_pipeline
 roadtext_textdet_test = _base_.roadtext_det_test
+roadtext_textdet_train.pipeline = _base_.train_pipeline
 roadtext_textdet_test.pipeline = _base_.test_pipeline
 
 train_dataloader = dict(
-    batch_size=16,
-    num_workers=8,
+    batch_size=8,
+    num_workers=4,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=roadtext_textdet_train)
 
 val_dataloader = dict(
     batch_size=1,
-    num_workers=4,
+    num_workers=1,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=roadtext_textdet_test)
 
 test_dataloader = val_dataloader
 
-auto_scale_lr = dict(base_batch_size=16)
+auto_scale_lr = dict(base_batch_size=8)

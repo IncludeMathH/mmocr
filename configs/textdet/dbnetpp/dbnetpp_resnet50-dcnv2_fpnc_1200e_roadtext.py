@@ -9,7 +9,7 @@ load_from = 'https://download.openmmlab.com/mmocr/textdet/dbnetpp/tmp_1.0_pretra
 
 # dataset settings
 train_list = [_base_.roadtext_det_train]
-test_list = [_base_.roadtext_det_train]
+test_list = [_base_.roadtext_det_test]
 
 train_dataloader = dict(
     batch_size=16,
