@@ -12,6 +12,7 @@ _base_.model.backbone = dict(
         'mmocr/backbone/resnet50-oclip-7ba0c533.pth'))
 
 _base_.train_dataloader.num_workers = 8
+_base_.train_dataloader.batch_size = 24
 _base_.optim_wrapper.optimizer.lr = 0.001
 
 param_scheduler = [
