@@ -49,7 +49,8 @@ class MMDet2MMOCR(BaseTransform):
                                 contour.reshape(-1) for contour in contours
                             ]
                         else:
-                            polygons += [results['gt_bboxes'][idx].reshape(-1)]
+                            import numpy as np
+                            polygons += [np.concatenate(contours, axis=0)]
                     # filter invalid polygons
                     gt_polygons = []
                     for polygon in polygons:
