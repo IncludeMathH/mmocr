@@ -35,7 +35,8 @@ val_evaluator = dict(
         dict(
             type='WordMetric',
             mode=['exact', 'ignore_case', 'ignore_case_symbol']),
-        dict(type='CharMetric')
+        dict(type='CharMetric'),
+        dict(type='OneMinusNEDMetric')
     ],
     dataset_prefixes=None)
 test_evaluator = val_evaluator

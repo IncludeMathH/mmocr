@@ -68,7 +68,7 @@ class WordMetric(BaseMetric):
             gt_text = data_sample.get('gt_text').get('item')
             if 'ignore_case' in self.mode or 'ignore_case_symbol' in self.mode:
                 pred_text_lower = pred_text.lower()
-                gt_text_lower = gt_text.lower()
+                gt_text_lower = gt_text.lower() if gt_text else ''
             if 'ignore_case_symbol' in self.mode:
                 gt_text_lower_ignore = self.valid_symbol.sub('', gt_text_lower)
                 pred_text_lower_ignore = self.valid_symbol.sub(
@@ -161,7 +161,7 @@ class CharMetric(BaseMetric):
         for data_sample in data_samples:
             pred_text = data_sample.get('pred_text').get('item')
             gt_text = data_sample.get('gt_text').get('item')
-            gt_text_lower = gt_text.lower()
+            gt_text_lower = gt_text.lower() if gt_text else ''
             pred_text_lower = pred_text.lower()
             gt_text_lower_ignore = self.valid_symbol.sub('', gt_text_lower)
             pred_text_lower_ignore = self.valid_symbol.sub('', pred_text_lower)
@@ -261,7 +261,7 @@ class OneMinusNEDMetric(BaseMetric):
         for data_sample in data_samples:
             pred_text = data_sample.get('pred_text').get('item')
             gt_text = data_sample.get('gt_text').get('item')
-            gt_text_lower = gt_text.lower()
+            gt_text_lower = gt_text.lower() if gt_text else ''
             pred_text_lower = pred_text.lower()
             gt_text_lower_ignore = self.valid_symbol.sub('', gt_text_lower)
             pred_text_lower_ignore = self.valid_symbol.sub('', pred_text_lower)
