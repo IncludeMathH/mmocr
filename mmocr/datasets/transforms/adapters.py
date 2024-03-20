@@ -42,11 +42,15 @@ class MMDet2MMOCR(BaseTransform):
                 # BitmapMasks
                 else:
                     polygons = []
-                    for mask in gt_masks.masks:
+                    for idx, mask in enumerate(gt_masks.masks):
                         contours, _ = bitmap_to_polygon(mask)
-                        polygons += [
-                            contour.reshape(-1) for contour in contours
-                        ]
+                        if len(contours) == 1:
+                            polygons += [
+                                contour.reshape(-1) for contour in contours
+                            ]
+                        else:
+                            import numpy as np
+                            polygons += [np.concatenate(contours, axis=0)]
                     # filter invalid polygons
                     gt_polygons = []
                     for polygon in polygons:
