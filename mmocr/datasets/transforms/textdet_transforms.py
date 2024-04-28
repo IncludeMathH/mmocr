@@ -3,7 +3,7 @@ import math
 import random
 from typing import Dict, List, Sequence, Tuple, Union
 
-import cv2
+import cv2, os, glob
 import mmcv
 import numpy as np
 from mmcv.transforms import RandomFlip as MMCV_RandomFlip
@@ -852,3 +852,93 @@ class TextDetRandomCrop(BaseTransform):
         repr_str += f'(target_size = {self.target_size}, '
         repr_str += f'positive_sample_ratio = {self.positive_sample_ratio})'
         return repr_str
+    
+@TRANSFORMS.register_module()
+@avoid_cache_randomness
+class MMOCRCopyPaste(BaseTransform):
+    def __init__(
+        self,
+        max_num_pasted=2,
+        object_dir=None,
+        iou_threshold=0.75, 
+        prob=0.5,
+    ) -> None:
+        self.max_num_pasted = max_num_pasted
+        self.object_dir = object_dir
+        
+        self.img_list = glob.glob(os.path.join(object_dir, '*.jpg'))
+        self.len_objects = len(self.img_list)
+        self.iou_threshold = iou_threshold
+        self.prob = prob
+
+    def bbox_overlaps(self, bboxes1, bboxes2):
+            """Calculate the intersection over union (IoU) between two sets of bboxes.
+
+            Args:
+                bboxes1 (ndarray): Shape (n, 4) representing bboxes, where n is the
+                    number of bboxes. The bboxes are expected to be in (x1, y1, x2, y2)
+                    format.
+                bboxes2 (ndarray): Shape (k, 4) representing bboxes, where k is the
+                    number of bboxes. The bboxes are expected to be in (x1, y1, x2, y2)
+                    format.
+
+            Returns:
+                ndarray: Shape (n, k) representing the IoU between each pair of bboxes
+                    from bboxes1 and bboxes2.
+            """
+            # Calculate the intersection area
+            left_top = np.maximum(bboxes1[:, None, :2], bboxes2[:, :2])
+            right_bottom = np.minimum(bboxes1[:, None, 2:], bboxes2[:, 2:])
+            wh = np.maximum(right_bottom - left_top, 0)
+            inter_areas = wh[:, :, 0] * wh[:, :, 1]     # (N, K)
+            bbox_areas = (bboxes1[:, 2] - bboxes1[:, 0]) * (
+                bboxes1[:, 3] - bboxes1[:, 1])
+            bboxes_erased_ratio = inter_areas.sum(-1) / (bbox_areas + 1e-7)   # (N, )
+
+            return bboxes_erased_ratio
+
+    def transform(self, results: dict) -> dict:
+        height, width = results['img'].shape[:2]
+        # 加载源图像和目标图像
+
+        num_pasted = np.random.randint(1, self.max_num_pasted)
+        idx_choiced = np.random.choice(self.len_objects, size=num_pasted, replace=False)
+
+        object_bboxes = []
+        for idx in list(idx_choiced):
+            object_img = cv2.imread(self.img_list[idx])
+            # 在目标图像中找到一个随机位置
+            object_height, object_width = object_img.shape[:2]
+                
+            if object_width > width or object_height > height:
+                ratio = 0.25 * min(object_width / width, object_height / height)
+                object_img = cv2.resize(object_img, dsize=(0, 0), fx=ratio, fy=ratio)
+                object_height, object_width = object_img.shape[:2]
+            y = np.random.randint(0, height - object_height)
+            x = np.random.randint(0, width - object_width)
+
+            # 创建一个掩码，将物体的位置设置为1，其他位置设置为0
+            mask = np.zeros_like(results['img'])
+            mask[y:y+object_height, x:x+object_width] = object_img.astype(np.bool_)
+
+            # 使用掩码将目标图像中的相应位置置零，然后再将物体添加到目标图像中
+            results['img'] = results['img'] * (1 - mask)
+            results['img'][y:y+object_height, x:x+object_width] += object_img
+            object_bboxes.append([x, y, x+object_width, y+object_height])
+
+        bboxes = results['gt_bboxes']
+        new_bboxes = np.array(object_bboxes, dtype=np.float32)
+        bboxes_erased_ratio = self.bbox_overlaps(bboxes, new_bboxes)
+        iou_mask = bboxes_erased_ratio < self.iou_threshold
+        results['gt_bboxes'] = bboxes[iou_mask]
+        results['gt_polygons'] = list(np.array(results['gt_polygons'])[iou_mask])
+        results['gt_ignored'] = results['gt_ignored'][iou_mask]
+        if results.get('gt_text', None) is not None:
+            results['gt_text'] = results['gt_text'][iou_mask]
+        if results.get('gt_bboxes_labels', None) is not None:
+            results['gt_bboxes_labels'] = results['gt_bboxes_labels'][iou_mask]
+        if results.get('gt_ignore_flags', None) is not None:
+            results['gt_ignore_flags'] = results['gt_ignore_flags'][iou_mask]
+        if results.get('gt_masks', None) is not None:
+            results['gt_masks'] = results['gt_masks'][iou_mask]
+        return results

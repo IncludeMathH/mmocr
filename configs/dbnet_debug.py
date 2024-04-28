@@ -215,14 +215,10 @@ train_dataloader = dict(
                 with_bbox=True,
                 with_label=True,
                 with_polygon=True),
-            dict(type='MMOCR2MMDet', poly2mask=True),
             dict(
-                type='mmdet.RandomErasing',
-                n_patches=(5, 10), 
-                ratio=(0, 0.2),
-                bbox_erased_thr=0.9,
+                type='MMOCRCopyPaste',
+                object_dir='data/cocotextv2/textdet_imgs/imgs',
             ),
-            dict(type='MMDet2MMOCR'),
             dict(keep_ratio=True, scale=(
                 640,
                 640,

@@ -8,7 +8,8 @@ from .ocr_transforms import (FixInvalidPolygon, RandomCrop, RandomRotate,
                              RemoveIgnored, Resize)
 from .textdet_transforms import (BoundedScaleAspectJitter, RandomFlip,
                                  ShortScaleAspectJitter, SourceImagePad,
-                                 TextDetRandomCrop, TextDetRandomCropFlip)
+                                 TextDetRandomCrop, TextDetRandomCropFlip,
+                                 MMOCRCopyPaste)
 from .textrecog_transforms import (CropHeight, ImageContentJitter, PadToWidth,
                                    PyramidRescale, RescaleToHeight,
                                    ReversePixels, TextRecogGeneralAug)
@@ -23,5 +24,5 @@ __all__ = [
     'PackKIEInputs', 'LoadKIEAnnotations', 'FixInvalidPolygon', 'MMDet2MMOCR',
     'MMOCR2MMDet', 'LoadImageFromFile', 'LoadImageFromNDArray', 'CropHeight',
     'InferencerLoader', 'RemoveIgnored', 'ConditionApply', 'CropHeight',
-    'TextRecogGeneralAug', 'ImageContentJitter', 'ReversePixels'
+    'TextRecogGeneralAug', 'ImageContentJitter', 'ReversePixels', 'MMOCRCopyPaste'
 ]

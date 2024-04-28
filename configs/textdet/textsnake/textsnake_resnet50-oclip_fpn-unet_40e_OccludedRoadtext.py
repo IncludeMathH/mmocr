@@ -33,6 +33,10 @@ ic15_textdet_train.pipeline = [
         with_polygon=True,
         with_label=True),
     dict(
+        type='MMOCRCopyPaste',
+        object_dir='data/cocotextv2/textdet_imgs/imgs',
+    ),
+    dict(
         type='TorchVisionWrapper',
         op='ColorJitter',
         brightness=32.0 / 255,
@@ -61,14 +65,6 @@ ic15_textdet_train.pipeline = [
                     dict(type='Resize', scale=800, keep_ratio=False)],
         prob=[0.4, 0.6]),
     dict(type='RandomFlip', prob=0.5, direction='horizontal'),
-    dict(type='MMOCR2MMDet', poly2mask=True),
-    dict(
-        type='mmdet.RandomErasing',
-        n_patches=(0, 10), 
-        ratio=(0, 0.2),
-    ),
-    dict(type='mmdet.FilterAnnotations', min_gt_bbox_wh=(1e-2, 1e-2)),
-    dict(type='MMDet2MMOCR'),
     dict(type='FixInvalidPolygon'),
     dict(
         type='PackTextDetInputs',
