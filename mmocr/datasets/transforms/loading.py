@@ -9,8 +9,12 @@ import numpy as np
 from mmcv.transforms import BaseTransform
 from mmcv.transforms import LoadAnnotations as MMCV_LoadAnnotations
 from mmcv.transforms import LoadImageFromFile as MMCV_LoadImageFromFile
+from torchvision.transforms import RandomAffine
+from PIL import Image
 
 from mmocr.registry import TRANSFORMS
+
+import os, cv2
 
 
 @TRANSFORMS.register_module()
@@ -142,6 +146,172 @@ class LoadImageFromFile(MMCV_LoadImageFromFile):
             repr_str += f'backend_args={self.backend_args})'
         return repr_str
 
+@TRANSFORMS.register_module()
+class LoadMVImageFromFile(MMCV_LoadImageFromFile):
+    """Load an image from file.
+
+    Required Keys:
+
+    - img_path
+
+    Modified Keys:
+
+    - img
+    - img_shape
+    - ori_shape
+
+    Args:
+        to_float32 (bool): Whether to convert the loaded image to a float32
+            numpy array. If set to False, the loaded image is an uint8 array.
+            Defaults to False.
+        color_type (str): The flag argument for :func:``mmcv.imfrombytes``.
+            Defaults to 'color'.
+        imdecode_backend (str): The image decoding backend type. The backend
+            argument for :func:``mmcv.imfrombytes``.
+            See :func:``mmcv.imfrombytes`` for details.
+            Defaults to 'cv2'.
+        file_client_args (dict): Arguments to instantiate a FileClient.
+            See :class:`mmengine.fileio.FileClient` for details.
+            Defaults to None. It will be deprecated in future. Please use
+            ``backend_args`` instead.
+            Deprecated in version 1.0.0rc6.
+        backend_args (dict, optional): Instantiates the corresponding file
+            backend. It may contain `backend` key to specify the file
+            backend. If it contains, the file backend corresponding to this
+            value will be used and initialized with the remaining values,
+            otherwise the corresponding file backend will be selected
+            based on the prefix of the file path. Defaults to None.
+            New in version 1.0.0rc6.
+        ignore_empty (bool): Whether to allow loading empty image or file path
+            not existent. Defaults to False.
+        min_size (int): The minimum size of the image to be loaded. If the
+            image is smaller than the minimum size, it will be regarded as a
+            broken image. Defaults to 0.
+    """
+
+    def __init__(
+        self,
+        to_float32: bool = False,
+        color_type: str = 'color',
+        imdecode_backend: str = 'cv2',
+        file_client_args: Optional[dict] = None,
+        min_size: int = 0,
+        ignore_empty: bool = False,
+        ref_anno: str = '',
+        ref_img_path: str = '',
+        *,
+        backend_args: Optional[dict] = None,
+    ) -> None:
+        self.ignore_empty = ignore_empty
+        self.to_float32 = to_float32
+        self.color_type = color_type
+        self.imdecode_backend = imdecode_backend
+        self.min_size = min_size
+        self.file_client_args = file_client_args
+        self.backend_args = backend_args
+        if file_client_args is not None:
+            warnings.warn(
+                '"file_client_args" will be deprecated in future. '
+                'Please use "backend_args" instead', DeprecationWarning)
+            if backend_args is not None:
+                raise ValueError(
+                    '"file_client_args" and "backend_args" cannot be set '
+                    'at the same time.')
+
+            self.file_client_args = file_client_args.copy()
+        if backend_args is not None:
+            self.backend_args = backend_args.copy()
+
+        if ref_anno and ref_img_path:
+            try:
+                import json
+                with open(ref_anno, 'r') as f:
+                    self.img2ref = json.load(f)
+                f.close()
+                self.ref_img_path = ref_img_path
+            except:
+                raise Exception("There are no ref_anno supplied!")
+        else:
+            self.ref_anno = None
+            self.ref_img_path = None
+
+    def _load_image(self, img_path: str, out_key: str, results: dict) -> None:
+        filename = img_path    # 图像路径的相对地址
+        try:
+            if getattr(self, 'file_client_args', None) is not None:
+                file_client = fileio.FileClient.infer_client(
+                    self.file_client_args, filename)
+                img_bytes = file_client.get(filename)
+            else:
+                img_bytes = fileio.get(
+                    filename, backend_args=self.backend_args)
+            img = mmcv.imfrombytes(
+                img_bytes, flag=self.color_type, backend=self.imdecode_backend)
+        except Exception as e:
+            if self.ignore_empty:
+                warnings.warn(f'Failed to load {filename} due to {e}')
+                return None
+            else:
+                raise e
+        if img is None or min(img.shape[:2]) < self.min_size:
+            if self.ignore_empty:
+                warnings.warn(f'Ignore broken image: {filename}')
+                return None
+            raise IOError(f'{filename} is broken')
+
+        if self.to_float32:
+            img = img.astype(np.float32)
+
+        if out_key == 'img':
+            # main image
+            results[out_key] = img
+            results['img_shape'] = img.shape[:2]
+            results['ori_shape'] = img.shape[:2]
+        else:
+            if out_key in results:
+                results[out_key].append(img)
+            else:
+                results[out_key] = []
+                results[out_key].append(img)
+
+    def transform(self, results: dict) -> Optional[dict]:
+        """Functions to load image.
+
+        Args:
+            results (dict): Result dict from :obj:``mmcv.BaseDataset``.
+
+        Returns:
+            dict: The dict contains loaded image and meta information.
+        """
+        self._load_image(results['img_path'], 'img', results)
+        if self.ref_img_path and self.img2ref:
+            self._load_ref_images(results)
+        else:
+            refimg_1 = RandomAffine(degrees=20, translate=(0.1, 0.1))(Image.fromarray(results['img']))
+            refimg_2 = RandomAffine(degrees=20, translate=(0.1, 0.1))(Image.fromarray(results['img']))
+            results['ref_imgs'] = [np.array(refimg_1), np.array(refimg_2)]
+
+        return results
+
+    def _load_ref_images(self, results):
+        img_name = os.path.basename(results['img_path'])
+        for ref_img_name in self.img2ref[img_name]:
+            ref_img_path = os.path.join(self.ref_img_path, ref_img_name)
+            self._load_image(ref_img_path, 'ref_imgs', results)
+
+    def __repr__(self):
+        repr_str = (f'{self.__class__.__name__}('
+                    f'ignore_empty={self.ignore_empty}, '
+                    f'min_size={self.min_size}, '
+                    f'to_float32={self.to_float32}, '
+                    f"color_type='{self.color_type}', "
+                    f"imdecode_backend='{self.imdecode_backend}', ")
+
+        if self.file_client_args is not None:
+            repr_str += f'file_client_args={self.file_client_args})'
+        else:
+            repr_str += f'backend_args={self.backend_args})'
+        return repr_str
 
 @TRANSFORMS.register_module()
 class LoadImageFromNDArray(LoadImageFromFile):

@@ -204,6 +204,9 @@ class RandomFlip(MMCV_RandomFlip):
             results (dict): Result dict containing the data to transform.
         """
         super()._flip(results)
+        if 'ref_imgs' in results:
+            for idx, ref_img in enumerate(results['ref_imgs']):
+                results['ref_imgs'][idx] = mmcv.imflip(ref_img, direction=results['flip_direction'])
         # flip polygons
         if results.get('gt_polygons', None) is not None:
             results['gt_polygons'] = self.flip_polygons(
@@ -279,6 +282,14 @@ class SourceImagePad(BaseTransform):
         expand_img = mmcv.imresize(img_cut, self.target_scale)
         # paste img to the top left corner of the padding region
         expand_img[0:h, 0:w] = img
+        if 'ref_imgs' in results:
+            for idx, ref_img in enumerate(results['ref_imgs']):
+                ref_img_cut = ref_img[h_ind:int(h_ind + h * self.crop_ratio[1]),
+                                      w_ind:int(w_ind + w * self.crop_ratio[1])]
+                expand_ref_img = mmcv.imresize(ref_img_cut, self.target_scale)
+                expand_ref_img[0:h, 0:w] = ref_img
+                results['ref_imgs'][idx] = expand_ref_img
+                
         results['img'] = expand_img
         results['img_shape'] = expand_img.shape[:2]
         results['pad_shape'] = expand_img.shape
@@ -861,15 +872,13 @@ class MMOCRCopyPaste(BaseTransform):
         max_num_pasted=2,
         object_dir=None,
         iou_threshold=0.75, 
-        prob=0.5,
     ) -> None:
         self.max_num_pasted = max_num_pasted
         self.object_dir = object_dir
         
-        self.img_list = glob.glob(os.path.join(object_dir, '*.jpg'))
+        self.img_list = glob.glob(os.path.join(object_dir, '*'))
         self.len_objects = len(self.img_list)
         self.iou_threshold = iou_threshold
-        self.prob = prob
 
     def bbox_overlaps(self, bboxes1, bboxes2):
             """Calculate the intersection over union (IoU) between two sets of bboxes.
@@ -898,22 +907,23 @@ class MMOCRCopyPaste(BaseTransform):
             return bboxes_erased_ratio
 
     def transform(self, results: dict) -> dict:
+        num_pasted = np.random.randint(0, self.max_num_pasted + 1)
+        if num_pasted == 0:
+            return results
+        idx_choiced = np.random.choice(self.len_objects, size=num_pasted, replace=False)
         height, width = results['img'].shape[:2]
         # 加载源图像和目标图像
-
-        num_pasted = np.random.randint(1, self.max_num_pasted)
-        idx_choiced = np.random.choice(self.len_objects, size=num_pasted, replace=False)
-
+        tmp_img = results['img']
         object_bboxes = []
         for idx in list(idx_choiced):
             object_img = cv2.imread(self.img_list[idx])
             # 在目标图像中找到一个随机位置
             object_height, object_width = object_img.shape[:2]
+            scale_factor = np.random.uniform(0.3, 0.5)
+            object_height, object_width = int(scale_factor * height), int(min(width * scale_factor, scale_factor * height * object_width / object_height))
+            # object_height, object_width = int(min(height * scale_factor, object_height)), int(min(width * scale_factor, object_width))
+            object_img = cv2.resize(object_img, dsize=(object_width, object_height))
                 
-            if object_width > width or object_height > height:
-                ratio = 0.25 * min(object_width / width, object_height / height)
-                object_img = cv2.resize(object_img, dsize=(0, 0), fx=ratio, fy=ratio)
-                object_height, object_width = object_img.shape[:2]
             y = np.random.randint(0, height - object_height)
             x = np.random.randint(0, width - object_width)
 
@@ -930,8 +940,19 @@ class MMOCRCopyPaste(BaseTransform):
         new_bboxes = np.array(object_bboxes, dtype=np.float32)
         bboxes_erased_ratio = self.bbox_overlaps(bboxes, new_bboxes)
         iou_mask = bboxes_erased_ratio < self.iou_threshold
+        if np.any(iou_mask):
+            pass
+        else:
+            # 所有的框都被过滤了
+            results['img'] = tmp_img
+            return results
         results['gt_bboxes'] = bboxes[iou_mask]
-        results['gt_polygons'] = list(np.array(results['gt_polygons'])[iou_mask])
+
+        gt_polygons = []
+        for idx, item in enumerate(iou_mask):
+            if item:
+                gt_polygons.append(results['gt_polygons'][idx])
+        results['gt_polygons'] = gt_polygons
         results['gt_ignored'] = results['gt_ignored'][iou_mask]
         if results.get('gt_text', None) is not None:
             results['gt_text'] = results['gt_text'][iou_mask]

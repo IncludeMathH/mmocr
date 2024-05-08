@@ -1,5 +1,5 @@
 """
-TODO: fix bug when using textsnake
+训练、eval均使用多视图
 """
 _base_ = [
     '_base_textsnake_resnet50_fpn-unet.py',
@@ -18,16 +18,27 @@ _base_.model.backbone = dict(
         checkpoint='https://download.openmmlab.com/'
         'mmocr/backbone/resnet50-oclip-7ba0c533.pth'))
 
-_base_.optim_wrapper.optimizer.lr = 2e-3
+_base_.optim_wrapper.optimizer.lr = 4e-3
 _base_.train_cfg.max_epochs=40
 _base_.train_cfg.val_interval=1
 _base_.param_scheduler[0].end=40
 _base_.default_hooks.checkpoint.interval=1    # 
+_base_.model.type='MVTextSnake'
+_base_.model.data_preprocessor=dict(
+        type='MVTextDetDataPreprocessor',
+        mean=[123.675, 116.28, 103.53, 123.675, 116.28, 103.53, 123.675, 116.28, 103.53],
+        std=[58.395, 57.12, 57.375, 58.395, 57.12, 57.375, 58.395, 57.12, 57.375],
+        bgr_to_rgb=True,
+        pad_size_divisor=32)
+_base_.model.process_multi_view = dict(
+        input_channel=98,
+        output_channel=32,
+)
 
 # dataset settings
 ic15_textdet_train = _base_.icdar2015_textdet_train
 ic15_textdet_train.pipeline = [
-    dict(type='LoadImageFromFile', color_type='color_ignore_orientation'),
+    dict(type='LoadMVImageFromFile', color_type='color_ignore_orientation'),
     dict(
         type='LoadOCRAnnotations',
         with_bbox=True,
@@ -59,7 +70,7 @@ ic15_textdet_train.pipeline = [
             dict(type='Resize', scale=800, keep_ratio=True),
             dict(type='SourceImagePad', target_scale=800)
         ],
-                    dict(type='Resize', scale=800, keep_ratio=False)],
+            dict(type='Resize', scale=800, keep_ratio=False)],
         prob=[0.4, 0.6]),
     dict(type='RandomFlip', prob=0.5, direction='horizontal'),
     dict(
@@ -79,14 +90,27 @@ OccludedRoadtext_textdet_test = dict(
     data_prefix=dict(img_path='val/'),
     ann_file='text_spotting.json',
     test_mode=True,
-    pipeline=_base_.test_pipeline)
+    pipeline=[
+    dict(type='LoadImageFromFile', color_type='color_ignore_orientation'),
+    dict(type='Resize', scale=(1333, 736), keep_ratio=True),
+    # add loading annotation after ``Resize`` because ground truth
+    # does not need to do resize data transform
+    dict(
+        type='LoadOCRAnnotations',
+        with_polygon=True,
+        with_bbox=True,
+        with_label=True),
+    dict(
+        type='PackTextDetInputs',
+        meta_keys=('img_path', 'ori_shape', 'img_shape', 'scale_factor'))
+])
 
 train_dataloader = dict(
     batch_size=2,
     num_workers=1,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
-    dataset=ic15_textdet_train)
+    dataset=ic15_textdet_train)   # OccludedRoadtext_textdet_train)
 
 val_dataloader = dict(
     batch_size=1,

@@ -183,6 +183,10 @@ class RandomCrop(BaseTransform):
         crop_box = self._sample_crop_box(results['img'].shape, results)
         img = self._crop_img(results['img'], crop_box)
         results['img'] = img
+        if 'ref_imgs' in results:
+            for idx, ref_img in enumerate(results['ref_imgs']):
+                results['ref_imgs'][idx] = self._crop_img(ref_img, crop_box)
+
         results['img_shape'] = img.shape[:2]
         crop_x = crop_box[0]
         crop_y = crop_box[1]
@@ -452,6 +456,52 @@ class RandomRotate(BaseTransform):
                     center_shift)
                 polygon_list.append(rotated_poly)
             results['gt_polygons'] = polygon_list
+    
+    def _rotate_ref_img(self, results: Dict) -> None:
+        """Rotating the input image based on the given angle.
+
+        Args:
+            results (dict): Result dict containing the data to transform.
+
+        Returns:
+            Tuple[int, int]: The shifting offset of the center point.
+        """
+        for idx, ref_img in enumerate(results['ref_imgs']):
+            h, w = ref_img.shape[:2]
+            rotation_matrix = cv2.getRotationMatrix2D(
+                (w / 2, h / 2), results['rotated_angle'], 1)
+
+            canvas_size = self._cal_canvas_size((h, w),
+                                                results['rotated_angle'])
+            center_shift = (int(
+                (canvas_size[1] - w) / 2), int((canvas_size[0] - h) / 2))
+            rotation_matrix[0, 2] += int((canvas_size[1] - w) / 2)
+            rotation_matrix[1, 2] += int((canvas_size[0] - h) / 2)
+            if self.pad_with_fixed_color:
+                rotated_img = cv2.warpAffine(
+                    ref_img,
+                    rotation_matrix, (canvas_size[1], canvas_size[0]),
+                    flags=cv2.INTER_NEAREST,
+                    borderValue=self.pad_value)
+            else:
+                mask = np.zeros_like(ref_img)
+                (h_ind, w_ind) = (np.random.randint(0, h * 7 // 8),
+                                np.random.randint(0, w * 7 // 8))
+                img_cut = ref_img[h_ind:(h_ind + h // 9),
+                                        w_ind:(w_ind + w // 9)]
+                img_cut = mmcv.imresize(img_cut,
+                                        (canvas_size[1], canvas_size[0]))
+                mask = cv2.warpAffine(
+                    mask,
+                    rotation_matrix, (canvas_size[1], canvas_size[0]),
+                    borderValue=[1, 1, 1])
+                rotated_img = cv2.warpAffine(
+                    ref_img,
+                    rotation_matrix, (canvas_size[1], canvas_size[0]),
+                    borderValue=[0, 0, 0])
+                rotated_img = rotated_img + img_cut * mask
+
+            results['ref_imgs'][idx] = ref_img
 
     def transform(self, results: Dict) -> Dict:
         """Applying random rotate on results.
@@ -476,6 +526,8 @@ class RandomRotate(BaseTransform):
 
             results['img_shape'] = (results['img'].shape[0],
                                     results['img'].shape[1])
+            if 'ref_imgs' in results:
+                self._rotate_ref_img(results)
         else:
             args = [
                 dict(
@@ -566,6 +618,28 @@ class Resize(MMCV_Resize):
         results['scale_factor'] = (w_scale, h_scale)
         results['keep_ratio'] = self.keep_ratio
 
+    def _resize_ref_img(self, results: dict) -> None:
+        """Resize images with ``results['scale']``.
+
+        If no image is provided, only resize ``results['img_shape']``.
+        """
+        for idx, ref_img in enumerate(results['ref_imgs']):
+            if self.keep_ratio:
+                ref_img, scale_factor = mmcv.imrescale(
+                    ref_img,
+                    results['scale'],
+                    interpolation=self.interpolation,
+                    return_scale=True,
+                    backend=self.backend)
+            else:
+                ref_img, w_scale, h_scale = mmcv.imresize(
+                    ref_img,
+                    results['scale'],
+                    interpolation=self.interpolation,
+                    return_scale=True,
+                    backend=self.backend)
+            results['ref_imgs'][idx] = ref_img
+
     def _resize_bboxes(self, results: dict) -> None:
         """Resize bounding boxes."""
         super()._resize_bboxes(results)
@@ -603,6 +677,8 @@ class Resize(MMCV_Resize):
             are updated in result dict.
         """
         results = super().transform(results)
+        if 'ref_imgs' in results:
+            self._resize_ref_img(results)
         self._resize_polygons(results)
         return results
 

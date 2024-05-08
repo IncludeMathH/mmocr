@@ -3,7 +3,7 @@ from .adapters import MMDet2MMOCR, MMOCR2MMDet
 from .formatting import PackKIEInputs, PackTextDetInputs, PackTextRecogInputs
 from .loading import (InferencerLoader, LoadImageFromFile,
                       LoadImageFromNDArray, LoadKIEAnnotations,
-                      LoadOCRAnnotations)
+                      LoadOCRAnnotations, LoadMVImageFromFile)
 from .ocr_transforms import (FixInvalidPolygon, RandomCrop, RandomRotate,
                              RemoveIgnored, Resize)
 from .textdet_transforms import (BoundedScaleAspectJitter, RandomFlip,
@@ -24,5 +24,6 @@ __all__ = [
     'PackKIEInputs', 'LoadKIEAnnotations', 'FixInvalidPolygon', 'MMDet2MMOCR',
     'MMOCR2MMDet', 'LoadImageFromFile', 'LoadImageFromNDArray', 'CropHeight',
     'InferencerLoader', 'RemoveIgnored', 'ConditionApply', 'CropHeight',
-    'TextRecogGeneralAug', 'ImageContentJitter', 'ReversePixels', 'MMOCRCopyPaste'
+    'TextRecogGeneralAug', 'ImageContentJitter', 'ReversePixels', 'MMOCRCopyPaste',
+    'LoadMVImageFromFile'
 ]

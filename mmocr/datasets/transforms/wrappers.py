@@ -288,6 +288,15 @@ class TorchVisionWrapper(BaseTransform):
         img = img[..., ::-1]
         results['img'] = img
         results['img_shape'] = img.shape[:2]
+        
+        if 'ref_imgs' in results:
+            for idx, ref_img in enumerate(results['ref_imgs']):
+                ref_img = ref_img[..., ::-1]
+                ref_img = Image.fromarray(ref_img)
+                ref_img = self.torchvision(ref_img)
+                ref_img = np.asarray(ref_img)
+                ref_img = ref_img[..., ::-1]
+                results['ref_imgs'][idx] = ref_img  
         return results
 
     def __repr__(self):

@@ -69,8 +69,10 @@ class PackTextDetInputs(BaseTransform):
 
     def __init__(self,
                  meta_keys=('img_path', 'ori_shape', 'img_shape',
-                            'scale_factor', 'flip', 'flip_direction')):
+                            'scale_factor', 'flip', 'flip_direction'),
+                 test_mode=False):
         self.meta_keys = meta_keys
+        self.test_mode = test_mode
 
     def transform(self, results: dict) -> dict:
         """Method to pack the input data.
@@ -87,9 +89,19 @@ class PackTextDetInputs(BaseTransform):
         """
         packed_results = dict()
         if 'img' in results:
+            # original pipeline
             img = results['img']
             if len(img.shape) < 3:
                 img = np.expand_dims(img, -1)
+            if not self.test_mode and 'ref_imgs' in results:
+                ref_imgs = results['ref_imgs']
+                try:
+                    # 暂时认为只有彩色图像
+                    ref_imgs.insert(0, img)
+                    img = np.concatenate(ref_imgs, axis=-1)    # (h, w, 9)
+                except:
+                    raise Exception ("Wrong in get pack ref_imgs!")
+            
             # A simple trick to speedup formatting by 3-5 times when
             # OMP_NUM_THREADS != 1
             # Refer to https://github.com/open-mmlab/mmdetection/pull/9533
